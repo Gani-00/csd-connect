@@ -1,0 +1,52 @@
+{% extends "layout.html" %}{% block title %}Notifications — CSD Connect{% endblock %}
+{% block content %}
+<div class="ph">
+  <div class="ph-row">
+    <div><h1>🔔 Notifications</h1><p>Your latest updates from CSD Connect</p></div>
+    <button class="btn btn-out btn-sm reveal" onclick="markAllRead()"><i class="fas fa-check-double"></i>Mark all read</button>
+  </div>
+</div>
+<div class="card reveal" id="notifWrap"><div class="spinner" style="padding:2rem"></div></div>
+{% endblock %}
+{% block extra_js %}
+<script type="module">
+import { db } from "/static/js/firebase-config.js";
+import { ref, onValue, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { timeAgo } from "/static/js/firebase-config.js";
+const ME = "{{ uid }}";
+const ICONS = { success: "✅", info: "ℹ️", warning: "⚠️", error: "❌", birthday: "🎂", chat: "💬", like: "❤️", story: "📸" };
+
+onValue(ref(db, `notifications/${ME}`), snap => {
+  const el = document.getElementById("notifWrap");
+  if (!snap.exists()) {
+    el.innerHTML = '<div class="empty"><i class="fas fa-bell-slash"></i><p>No notifications yet</p></div>';
+    return;
+  }
+  const items = Object.entries(snap.val()).sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+  el.innerHTML = items.map(([id, n]) => `
+    <div class="notif-item ${!n.read ? 'unread' : ''}" id="ni-${id}">
+      <div class="notif-icon">${ICONS[n.type] || '🔔'}</div>
+      <div style="flex:1">
+        <div class="notif-msg">${n.message}</div>
+        <div class="notif-time">${n.ts ? timeAgo(n.ts) : ''}</div>
+      </div>
+      ${!n.read ? `<button onclick="markRead('${id}')" class="btn btn-out btn-xs" style="flex-shrink:0">Mark read</button>` : ''}
+    </div>`).join("");
+});
+
+window.markRead = async function(id) {
+  await set(ref(db, `notifications/${ME}/${id}/read`), true);
+  showToast("✅ Marked read");
+};
+
+window.markAllRead = async function() {
+  const snap = await get(ref(db, `notifications/${ME}`));
+  if (!snap.exists()) return;
+  const updates = {};
+  Object.keys(snap.val()).forEach(id => { updates[`notifications/${ME}/${id}/read`] = true; });
+  const { update } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js");
+  await update(ref(db), updates);
+  showToast("✅ All marked read");
+};
+</script>
+{% endblock %}

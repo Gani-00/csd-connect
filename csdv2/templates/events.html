@@ -1,0 +1,91 @@
+{% extends "layout.html" %}{% block title %}Events — CSD Connect{% endblock %}
+{% block content %}
+<div class="ph"><div class="ph-row">
+  <div><h1>📅 Events & RSVP</h1><p>Class meetups, reunions, and celebrations — RSVP in one tap</p></div>
+  <button class="btn btn-v reveal" onclick="openModal('evModal')"><i class="fas fa-plus"></i>Add Event</button>
+</div></div>
+<div id="eventsWrap"><div class="spinner"></div></div>
+<div class="overlay" id="evModal"><div class="modal">
+  <div class="modal-t">📅 Create Event</div><div class="modal-s">Add a class event or meetup</div>
+  <div class="fg"><label class="fl">Event Title</label><input type="text" id="eTitle" class="fi" placeholder="CSD Reunion 2025 🎉"/></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+    <div class="fg"><label class="fl">Date</label><input type="date" id="eDate" class="fi"/></div>
+    <div class="fg"><label class="fl">Time</label><input type="time" id="eTime" class="fi"/></div>
+  </div>
+  <div class="fg"><label class="fl">Location</label><input type="text" id="eLoc" class="fi" placeholder="Goa, India 📍"/></div>
+  <div class="fg"><label class="fl">Description</label><textarea id="eDesc" class="fi" rows="3" placeholder="Tell us about the event…"></textarea></div>
+  <div style="display:flex;gap:.75rem">
+    <button class="btn btn-v" onclick="addEvent()"><i class="fas fa-plus"></i>Create</button>
+    <button class="btn btn-out" onclick="closeModal('evModal')">Cancel</button>
+  </div>
+</div></div>
+{% endblock %}
+{% block extra_js %}
+<script type="module">
+import { db } from "/static/js/firebase-config.js";
+import { ref, onValue, push, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+const ME = "{{ uid }}", ME_NAME = "{{ full_name }}";
+
+onValue(ref(db, "events"), snap => {
+  const el = document.getElementById("eventsWrap");
+  if (!snap.exists()) {
+    el.innerHTML = '<div class="empty"><i class="fas fa-calendar-alt"></i><p>No events yet. Create the first one!</p></div>';
+    return;
+  }
+  const items = Object.entries(snap.val()).sort((a, b) => (a[1].date || "").localeCompare(b[1].date || ""));
+  el.innerHTML = items.map(([id, ev]) => {
+    const rsvp = ev.rsvp || {};
+    const myRsvp = rsvp[ME] || null;
+    const yes   = Object.values(rsvp).filter(v => v === "yes").length;
+    const no    = Object.values(rsvp).filter(v => v === "no").length;
+    const maybe = Object.values(rsvp).filter(v => v === "maybe").length;
+    const isPast = ev.date && ev.date < new Date().toISOString().slice(0, 10);
+    return `<div class="event-card reveal" style="${isPast ? 'opacity:.65' : ''}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem">
+        <div>
+          <div class="ev-title">${ev.title}</div>
+          <div class="ev-date">
+            <i class="fas fa-calendar" style="color:var(--violet);margin-right:.3rem"></i>${ev.date || '—'}
+            ${ev.time ? `<i class="fas fa-clock" style="color:var(--t3);margin-left:.75rem;margin-right:.3rem"></i>${ev.time}` : ''}
+            ${ev.location ? `<i class="fas fa-map-marker-alt" style="color:var(--coral);margin-left:.75rem;margin-right:.3rem"></i>${ev.location}` : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+          <span class="tag tag-g"><i class="fas fa-check"></i> ${yes} Yes</span>
+          <span class="tag tag-a"><i class="fas fa-question"></i> ${maybe} Maybe</span>
+          <span class="tag" style="background:rgba(255,107,107,.12);color:var(--coral);border-color:rgba(255,107,107,.25)"><i class="fas fa-times"></i> ${no} No</span>
+        </div>
+      </div>
+      ${ev.description ? `<div class="ev-desc">${ev.description}</div>` : ''}
+      ${!isPast ? `<div class="rsvp-row">
+        <button class="rsvp-btn yes ${myRsvp === 'yes' ? 'active' : ''}" onclick="rsvp('${id}','yes')">✅ Yes, I'm in!</button>
+        <button class="rsvp-btn maybe ${myRsvp === 'maybe' ? 'active' : ''}" onclick="rsvp('${id}','maybe')">🤔 Maybe</button>
+        <button class="rsvp-btn no ${myRsvp === 'no' ? 'active' : ''}" onclick="rsvp('${id}','no')">❌ Can't make it</button>
+      </div>` : `<div style="font-size:.8rem;color:var(--t3);font-style:italic">This event has passed</div>`}
+      <div style="font-size:.73rem;color:var(--t3);margin-top:.6rem">Created by ${ev.author_name || '?'}</div>
+    </div>`;
+  }).join("");
+  document.querySelectorAll(".reveal").forEach((el, i) => setTimeout(() => el.classList.add("in"), 50 + i * 70));
+});
+
+window.rsvp = async function(id, status) {
+  await set(ref(db, `events/${id}/rsvp/${ME}`), status);
+  showToast(status === 'yes' ? "✅ You're in!" : status === 'maybe' ? "🤔 Maybe noted!" : "❌ Response saved");
+};
+
+window.addEvent = async function() {
+  const t = document.getElementById("eTitle").value.trim();
+  const d = document.getElementById("eDate").value;
+  if (!t || !d) { showToast("Title and date required"); return; }
+  await push(ref(db, "events"), {
+    title: t, date: d,
+    time: document.getElementById("eTime").value,
+    location: document.getElementById("eLoc").value.trim(),
+    description: document.getElementById("eDesc").value.trim(),
+    author_name: ME_NAME, author_id: ME,
+    created_at: Date.now(), rsvp: {}
+  });
+  showToast("✅ Event created!"); closeModal("evModal");
+};
+</script>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "layout.html" %}
+{% block title %}#{{ room }} — CSD Connect{% endblock %}
+{% block content %}{% endblock %}
+{% block extra_css %}<style>
+.page{padding:0!important;overflow:hidden;height:calc(100vh - var(--nav-h))}
+</style>{% endblock %}
+{% block extra_js %}
+<div class="chat-layout">
+  <div class="chat-rooms">
+    <div style="font-size:.68rem;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--t3);margin-bottom:.75rem;padding:0 .25rem">Channels</div>
+    {% for r in ['general','memories','study','random','announcements'] %}
+    <a href="/chat/{{ r }}" class="room-pill {% if r==room %}on{% endif %}">
+      <i class="fas fa-hashtag" style="font-size:.75rem;opacity:.55"></i>{{ r }}
+    </a>
+    {% endfor %}
+    <hr style="border:none;border-top:1px solid var(--b1);margin:.75rem 0"/>
+    <div style="font-size:.68rem;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--t3);margin-bottom:.6rem;padding:0 .25rem">Members</div>
+    <div id="membersList"></div>
+  </div>
+  <div class="chat-main">
+    <div class="chat-hdr">
+      <i class="fas fa-hashtag" style="color:var(--violet)"></i>
+      <div>
+        <div style="font-weight:700">{{ room }}</div>
+        <div style="font-size:.73rem;color:var(--t3)"><span id="onlineCount">—</span> online</div>
+      </div>
+    </div>
+    <div class="chat-msgs" id="chatMsgs"></div>
+    <div id="typingBox" style="padding:0 1.25rem;min-height:24px"></div>
+    <div class="chat-bar">
+      <textarea class="chat-inp" id="chatInp" placeholder="Message #{{ room }}… (Enter to send)" rows="1"></textarea>
+      <button class="send-btn" onclick="sendMsg()"><i class="fas fa-paper-plane"></i></button>
+    </div>
+  </div>
+</div>
+<script type="module">
+import { initChat } from "/static/js/chat.js";
+import { db } from "/static/js/firebase-config.js";
+import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { initials } from "/static/js/firebase-config.js";
+initChat("{{ uid }}", "{{ full_name }}", "{{ avatar_color }}", "{{ room }}");
+onValue(ref(db,"users"), snap=>{
+  if(!snap.exists()) return;
+  const el=document.getElementById("membersList");
+  onValue(ref(db,"online"), os=>{
+    const online=os.exists()?Object.keys(os.val()):[];
+    el.innerHTML=Object.entries(snap.val()).map(([uid,u])=>`
+      <a href="/dm/${u.username}" class="mem-pill" data-uid="${uid}">
+        <div class="av av-28" style="background:${u.avatar_color||'#7c6bff'}">${initials(u.full_name||'?')}</div>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.79rem">${(u.full_name||'').split(' ')[0]}</span>
+        ${online.includes(uid)?'<span class="online-dot"></span>':''}
+      </a>`).join("");
+  });
+});
+</script>
+{% endblock %}

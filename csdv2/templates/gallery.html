@@ -1,0 +1,138 @@
+{% extends "layout.html" %}
+{% block title %}Gallery — CSD Connect{% endblock %}
+{% block content %}
+<div class="ph"><div class="ph-row">
+  <div><h1>📸 Memories Gallery</h1><p>Every beautiful moment of the CSD batch — stored forever in Firebase</p></div>
+  <button class="btn btn-v reveal" onclick="openModal('uploadModal')"><i class="fas fa-plus"></i>Upload</button>
+</div></div>
+
+<div class="upload-zone reveal" id="dropZone" onclick="document.getElementById('fileInp').click()">
+  <i class="fas fa-cloud-upload-alt"></i>
+  <div style="font-weight:700;margin-bottom:.25rem">Drop photos/videos here or click</div>
+  <div style="font-size:.8rem">Stored in Firebase Storage — never lost</div>
+</div>
+<input type="file" id="fileInp" accept="image/*,video/*" style="display:none" onchange="startUpload(this.files[0])"/>
+
+<div style="display:flex;gap:.5rem;margin-bottom:1.5rem;flex-wrap:wrap" class="reveal">
+  <button class="btn btn-v btn-sm" onclick="filterG('all',this)">All</button>
+  <button class="btn btn-out btn-sm" onclick="filterG('image',this)">Photos</button>
+  <button class="btn btn-out btn-sm" onclick="filterG('video',this)">Videos</button>
+</div>
+
+<div class="gallery-masonry" id="galleryGrid"><div class="spinner"></div></div>
+
+<div class="lb" id="lb" onclick="closeLB()">
+  <button class="lb-close" onclick="closeLB()"><i class="fas fa-times"></i></button>
+  <img class="lb-img" id="lbImg" src="" style="display:none"/>
+  <video id="lbVid" controls style="max-width:90vw;max-height:88vh;border-radius:var(--r);display:none"></video>
+</div>
+
+<div class="overlay" id="uploadModal">
+  <div class="modal">
+    <div class="modal-t">📤 Upload Memory</div>
+    <div class="modal-s">Stored permanently in Firebase Storage</div>
+    <div class="fg"><label class="fl">File</label><input type="file" id="mFile" class="fi" accept="image/*,video/*"/></div>
+    <div class="fg"><label class="fl">Caption</label><input type="text" id="mCap" class="fi" placeholder="Tell the story…"/></div>
+    <div id="uploadProg" style="display:none;margin-bottom:.75rem">
+      <div style="font-size:.82rem;color:var(--t2);margin-bottom:.3rem">Uploading to Firebase…</div>
+      <div style="background:var(--bg3);border-radius:4px;height:6px"><div id="progBar" style="height:100%;background:var(--violet);border-radius:4px;width:0;transition:width .3s"></div></div>
+    </div>
+    <div style="display:flex;gap:.75rem">
+      <button class="btn btn-v" onclick="modalUpload()"><i class="fas fa-upload"></i>Upload</button>
+      <button class="btn btn-out" onclick="closeModal('uploadModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script type="module">
+import { db, storage } from "/static/js/firebase-config.js";
+import { ref as dbRef, push, onValue, set, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { ref as stRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { initials } from "/static/js/firebase-config.js";
+
+const ME="{{ uid }}", ME_NAME="{{ full_name }}";
+let filterType="all";
+
+// Load gallery
+onValue(dbRef(db,"media"), snap=>{
+  const grid=document.getElementById("galleryGrid");
+  if(!snap.exists()){grid.innerHTML='<div class="empty" style="grid-column:1/-1"><i class="fas fa-images"></i><p>No memories yet — upload the first one!</p></div>';return;}
+  const items=Object.entries(snap.val()).reverse();
+  grid.innerHTML=items.map(([id,m])=>`
+    <div class="g-item reveal" data-type="${m.type}" style="${filterType!=='all'&&m.type!==filterType?'display:none':''}">
+      ${m.type==='image'
+        ?`<img class="g-img" src="${m.url}" loading="lazy" onclick="openLB('${m.url}',false)"/>`
+        :`<div class="g-placeholder" style="cursor:pointer" onclick="openLB('${m.url}',true)"><i class="fas fa-play-circle" style="font-size:2.5rem;color:var(--violet)"></i></div>`}
+      <div class="g-overlay">
+        <div class="g-cap">${m.caption||'No caption'}</div>
+        <div class="g-meta">
+          <span>${m.author_name?.split(' ')[0]||'?'}</span>
+          <div class="g-likes" onclick="toggleLike('${id}',event)">
+            ${(m.likes_by||{})[ME]?'❤️':'🤍'} <span>${Object.keys(m.likes_by||{}).length}</span>
+          </div>
+        </div>
+      </div>
+    </div>`).join("");
+  document.querySelectorAll(".reveal").forEach((el,i)=>{el.style.transitionDelay=`${i*.04}s`;setTimeout(()=>el.classList.add("in"),50+i*50);});
+});
+
+window.filterG=(type,btn)=>{
+  filterType=type;
+  document.querySelectorAll(".g-item").forEach(el=>el.style.display=(type==='all'||el.dataset.type===type)?'block':'none');
+  document.querySelectorAll("[onclick*='filterG']").forEach(b=>{b.classList.remove("btn-v");b.classList.add("btn-out");});
+  btn.classList.replace("btn-out","btn-v");
+};
+
+window.toggleLike=async(id,e)=>{
+  e.stopPropagation();
+  const likesRef=dbRef(db,`media/${id}/likes_by/${ME}`);
+  const snap=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js").then(m=>m.get(likesRef));
+  if(snap.exists()) await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js").then(m=>m.remove(likesRef));
+  else await set(likesRef,true);
+};
+
+window.openLB=(url,isVid)=>{
+  const lb=document.getElementById("lb"),img=document.getElementById("lbImg"),vid=document.getElementById("lbVid");
+  if(isVid){img.style.display="none";vid.src=url;vid.style.display="block";}
+  else{vid.style.display="none";img.src=url;img.style.display="block";}
+  lb.classList.add("open");
+};
+window.closeLB=()=>{document.getElementById("lb").classList.remove("open");document.getElementById("lbVid").pause?.();};
+document.addEventListener("keydown",e=>{if(e.key==="Escape")window.closeLB?.()});
+
+async function uploadFile(file,caption){
+  const ext=file.name.split('.').pop().toLowerCase();
+  const type=['png','jpg','jpeg','gif','webp'].includes(ext)?'image':'video';
+  const path=`media/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const sRef=stRef(storage,path);
+  const task=uploadBytesResumable(sRef,file);
+  document.getElementById("uploadProg").style.display="block";
+  return new Promise((resolve,reject)=>{
+    task.on("state_changed",
+      s=>{const p=(s.bytesTransferred/s.totalBytes)*100;document.getElementById("progBar").style.width=p+"%";},
+      reject,
+      async()=>{
+        const url=await getDownloadURL(task.snapshot.ref);
+        await push(dbRef(db,"media"),{url,type,caption,author_id:ME,author_name:ME_NAME,ts:Date.now(),likes_by:{}});
+        resolve(url);
+      }
+    );
+  });
+}
+
+window.startUpload=async(file)=>{if(file) await uploadFile(file,"").then(()=>{showToast("✅ Memory uploaded!");closeModal("uploadModal");}).catch(()=>showToast("❌ Upload failed"));};
+window.modalUpload=async()=>{
+  const file=document.getElementById("mFile").files[0];
+  const cap=document.getElementById("mCap").value;
+  if(!file){showToast("Select a file first");return;}
+  try{await uploadFile(file,cap);showToast("✅ Memory uploaded!");closeModal("uploadModal");}
+  catch(e){showToast("❌ Upload failed: "+e.message);}
+};
+
+const dz=document.getElementById("dropZone");
+dz.addEventListener("dragover",e=>{e.preventDefault();dz.classList.add("drag");});
+dz.addEventListener("dragleave",()=>dz.classList.remove("drag"));
+dz.addEventListener("drop",e=>{e.preventDefault();dz.classList.remove("drag");if(e.dataTransfer.files[0])window.startUpload(e.dataTransfer.files[0]);});
+</script>
+{% endblock %}

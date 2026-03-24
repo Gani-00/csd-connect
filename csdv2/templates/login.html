@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#080810"/>
+<title>Login — CSD Connect</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/main.css') }}"/>
+</head>
+<body>
+<canvas id="pcv"></canvas>
+<div class="auth-wrap">
+  <div class="auth-left">
+    <div class="auth-left-bg"></div>
+    <div class="auth-brand">
+      <div class="auth-title">
+        <span style="color:var(--violet)">CSD</span><span style="color:var(--pink)">·</span><span>Connect</span>
+      </div>
+      <p class="auth-sub">Your private class platform — memories, chats, milestones, time capsules and more. All in one place. 💙</p>
+      <div class="auth-badges">
+        <span class="auth-badge">🔥 Firebase powered</span>
+        <span class="auth-badge">📱 PWA — install on phone</span>
+        <span class="auth-badge">⚡ Real-time</span>
+        <span class="auth-badge">🎓 63 Members</span>
+        <span class="auth-badge">💬 Group & DM chat</span>
+        <span class="auth-badge">⏳ Time Capsule</span>
+        <span class="auth-badge">📸 Stories</span>
+        <span class="auth-badge">🗳️ Polls & RSVP</span>
+      </div>
+    </div>
+  </div>
+  <div class="auth-right">
+    <div class="auth-card">
+      <div style="font-size:2.2rem;margin-bottom:0.75rem">👋</div>
+      <div class="auth-h">Welcome back</div>
+      <p class="auth-p">Sign in to CSD Connect</p>
+      <div class="auth-err" id="loginErr"></div>
+      <div class="fg"><label class="fl">Username</label><input type="text" id="loginUser" class="fi" placeholder="your_username" autocomplete="username"/></div>
+      <div class="fg">
+        <label class="fl">Password</label>
+        <div style="position:relative">
+          <input type="password" id="loginPw" class="fi" placeholder="••••••••" autocomplete="current-password"/>
+          <button type="button" onclick="togglePw('loginPw','pwEye')" style="position:absolute;right:.75rem;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--t3);cursor:pointer"><i id="pwEye" class="fas fa-eye"></i></button>
+        </div>
+      </div>
+      <button class="btn btn-v btn-full" id="loginBtn" onclick="doLogin()"><i class="fas fa-arrow-right"></i>Sign In</button>
+      <p style="text-align:center;margin-top:1.5rem;color:var(--t2);font-size:0.875rem">New here? <a href="/register" style="color:var(--violet);font-weight:700">Create account</a></p>
+      <div style="margin-top:1.75rem;padding-top:1.25rem;border-top:1px solid var(--b1)">
+        <p style="font-size:0.73rem;color:var(--t3);text-align:center;margin-bottom:0.6rem">Quick demo login</p>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center">
+          <button class="btn btn-out btn-xs" onclick="quick('admin','admin123')">Admin</button>
+          <button class="btn btn-out btn-xs" onclick="quick('arjun_s','pass123')">Arjun</button>
+          <button class="btn btn-out btn-xs" onclick="quick('priya_p','pass123')">Priya</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static',filename='js/main.js') }}"></script>
+<script type="module">
+import { loginUser } from "/static/js/auth.js";
+window.doLogin = async function() {
+  const u = document.getElementById("loginUser").value.trim();
+  const p = document.getElementById("loginPw").value;
+  const err = document.getElementById("loginErr");
+  const btn = document.getElementById("loginBtn");
+  err.classList.remove("show"); btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in…';
+  try {
+    await loginUser(u, p);
+    location.href = "/";
+  } catch(e) {
+    err.textContent = "Wrong username or password.";
+    err.classList.add("show");
+    btn.innerHTML = '<i class="fas fa-arrow-right"></i> Sign In';
+  }
+};
+window.quick = (u,p)=>{ document.getElementById("loginUser").value=u; document.getElementById("loginPw").value=p; window.doLogin(); };
+document.getElementById("loginPw").addEventListener("keydown", e=>{ if(e.key==="Enter") window.doLogin(); });
+</script>
+<script>
+function togglePw(id,eye){ const f=document.getElementById(id),e=document.getElementById(eye); f.type=f.type==="password"?"text":"password"; e.className=f.type==="password"?"fas fa-eye":"fas fa-eye-slash"; }
+</script>
+</body></html>

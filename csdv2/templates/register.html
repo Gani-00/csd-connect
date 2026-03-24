@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Register — CSD Connect</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/main.css') }}"/>
+</head><body>
+<canvas id="pcv"></canvas>
+<div class="auth-wrap">
+  <div class="auth-left"><div class="auth-left-bg"></div>
+    <div class="auth-brand">
+      <div class="auth-title"><span style="color:var(--violet)">CSD</span><span style="color:var(--pink)">·</span><span>Connect</span></div>
+      <p class="auth-sub">Join your batch platform. Connect, relive memories, and stay together — forever. 🎓</p>
+      <div class="auth-badges"><span class="auth-badge">✅ Free forever</span><span class="auth-badge">🔒 Private</span><span class="auth-badge">📱 Mobile app</span></div>
+    </div>
+  </div>
+  <div class="auth-right"><div class="auth-card">
+    <div style="font-size:2rem;margin-bottom:.75rem">🎓</div>
+    <div class="auth-h">Join CSD Connect</div>
+    <p class="auth-p">Create your account and reunite with your batch</p>
+    <div class="auth-err" id="regErr"></div>
+    <div class="fg"><label class="fl">Full Name</label><input type="text" id="rName" class="fi" placeholder="Arjun Sharma"/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="fg"><label class="fl">Username</label><input type="text" id="rUser" class="fi" placeholder="arjun_s"/></div>
+      <div class="fg"><label class="fl">Roll No</label><input type="text" id="rRoll" class="fi" placeholder="CSD001"/></div>
+    </div>
+    <div class="fg"><label class="fl">Birthday 🎂</label><input type="date" id="rBday" class="fi"/></div>
+    <div class="fg"><label class="fl">Password</label><input type="password" id="rPw" class="fi" placeholder="Min 6 characters"/></div>
+    <button class="btn btn-v btn-full" id="regBtn" onclick="doRegister()"><i class="fas fa-user-plus"></i>Create Account</button>
+    <p style="text-align:center;margin-top:1.25rem;color:var(--t2);font-size:.875rem">Already have an account? <a href="/login" style="color:var(--violet);font-weight:700">Sign in</a></p>
+  </div></div>
+</div>
+<script src="{{ url_for('static',filename='js/main.js') }}"></script>
+<script type="module">
+import { registerUser } from "/static/js/auth.js";
+window.doRegister = async function() {
+  const n=document.getElementById("rName").value.trim(), u=document.getElementById("rUser").value.trim(),
+        r=document.getElementById("rRoll").value.trim(), p=document.getElementById("rPw").value,
+        b=document.getElementById("rBday").value;
+  const err=document.getElementById("regErr"), btn=document.getElementById("regBtn");
+  if(!n||!u||p.length<6){err.textContent="Please fill all fields. Password min 6 chars.";err.classList.add("show");return;}
+  err.classList.remove("show"); btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Creating…';
+  try{ await registerUser(n,u,r,p,b); location.href="/"; }
+  catch(e){ err.textContent=e.message||"Registration failed. Username may be taken."; err.classList.add("show"); btn.innerHTML='<i class="fas fa-user-plus"></i> Create Account'; }
+};
+</script>
+</body></html>

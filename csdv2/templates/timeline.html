@@ -1,0 +1,51 @@
+{% extends "layout.html" %}{% block title %}Timeline — CSD Connect{% endblock %}
+{% block content %}
+<div class="ph"><div class="ph-row"><div><h1>🗓️ Class Timeline</h1><p>Every CSD milestone — stored in Firebase forever</p></div>
+<button class="btn btn-v reveal" onclick="openModal('addEvModal')"><i class="fas fa-plus"></i>Add Event</button></div></div>
+<div class="tl-wrap" id="tlWrap"><div class="spinner"></div></div>
+<div class="overlay" id="addEvModal"><div class="modal">
+  <div class="modal-t">📅 Add Timeline Event</div><div class="modal-s">Add a CSD milestone</div>
+  <div class="fg"><label class="fl">Title</label><input type="text" id="evT" class="fi" placeholder="e.g. Hackathon Winners 🏆"/></div>
+  <div class="fg"><label class="fl">Date</label><input type="date" id="evD" class="fi"/></div>
+  <div class="fg"><label class="fl">Type</label>
+    <select id="evType" class="fi">
+      <option value="milestone">Milestone</option><option value="academic">Academic</option>
+      <option value="event">Event</option><option value="trip">Trip</option>
+      <option value="achievement">Achievement</option><option value="general">General</option>
+    </select>
+  </div>
+  <div class="fg"><label class="fl">Description</label><textarea id="evDesc" class="fi" placeholder="Tell the story…"></textarea></div>
+  <div style="display:flex;gap:.75rem"><button class="btn btn-v" onclick="addTl()"><i class="fas fa-plus"></i>Add</button><button class="btn btn-out" onclick="closeModal('addEvModal')">Cancel</button></div>
+</div></div>
+{% endblock %}
+{% block extra_js %}
+<script type="module">
+import { db } from "/static/js/firebase-config.js";
+import { ref, onValue, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+const COLORS={milestone:"var(--violet)",academic:"var(--cyan)",event:"var(--pink)",trip:"var(--amber)",achievement:"var(--gold)",general:"var(--green)"};
+onValue(ref(db,"timeline"), snap=>{
+  const el=document.getElementById("tlWrap");
+  if(!snap.exists()){el.innerHTML='<div class="empty"><i class="fas fa-stream"></i><p>No events yet.</p></div>';return;}
+  const items=Object.values(snap.val()).sort((a,b)=>a.date.localeCompare(b.date));
+  el.innerHTML=items.map((e,i)=>`
+    <div class="tl-item reveal" style="animation-delay:${i*.07}s">
+      <div class="tl-dot" style="background:${COLORS[e.type]||'var(--violet)'}"></div>
+      <div class="tl-card">
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.35rem">
+          <div class="tl-date">${e.date}</div>
+          <span class="tag" style="background:${COLORS[e.type]||'var(--violet)'}22;color:${COLORS[e.type]||'var(--violet)'};border-color:${COLORS[e.type]||'var(--violet)'}44">${e.type}</span>
+        </div>
+        <div class="tl-title">${e.title}</div>
+        ${e.description?`<div class="tl-desc">${e.description}</div>`:""}
+        ${e.author_name?`<div style="font-size:.72rem;color:var(--t3);margin-top:.35rem">Added by ${e.author_name}</div>`:""}
+      </div>
+    </div>`).join("");
+  document.querySelectorAll(".reveal").forEach((el,i)=>setTimeout(()=>el.classList.add("in"),80+i*60));
+});
+window.addTl=async function(){
+  const t=document.getElementById("evT").value.trim(), d=document.getElementById("evD").value;
+  if(!t||!d){showToast("Title and date required");return;}
+  await push(ref(db,"timeline"),{title:t,date:d,type:document.getElementById("evType").value,description:document.getElementById("evDesc").value,author_name:"{{ full_name }}",author_id:"{{ uid }}",created_at:Date.now()});
+  showToast("✅ Event added!"); closeModal("addEvModal");
+};
+</script>{% endblock %}

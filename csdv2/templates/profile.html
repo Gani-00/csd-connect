@@ -1,0 +1,104 @@
+{% extends "layout.html" %}{% block title %}Profile — CSD Connect{% endblock %}
+{% block content %}
+<div id="profileContent"><div class="spinner"></div></div>
+<div class="overlay" id="editModal"><div class="modal">
+  <div class="modal-t">✏️ Edit Profile</div>
+  <div class="fg"><label class="fl">Bio</label><textarea id="eBio" class="fi"></textarea></div>
+  <div class="fg"><label class="fl">Mood</label>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.25rem">
+      {% for mood in ['😊','😎','🎓','💻','🎮','😴','📚','🏃','🎵','✈️','🍕','🎉'] %}
+      <button class="btn btn-out btn-xs mood-opt" onclick="selectMood('{{ mood }}')" data-mood="{{ mood }}">{{ mood }}</button>
+      {% endfor %}
+    </div>
+    <input type="hidden" id="eMood" value="😊"/>
+  </div>
+  <div class="fg"><label class="fl">Avatar Color</label>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.25rem">
+      {% for c in ['#6c63ff','#ff6b9d','#ff6b6b','#ffd93d','#4ade80','#00d4ff','#ffb347','#cc5de8','#2dd4bf','#3b82f6'] %}
+      <div class="color-opt" data-c="{{ c }}" onclick="selectColor('{{ c }}')" style="width:28px;height:28px;border-radius:50%;background:{{ c }};cursor:pointer;border:2px solid transparent;transition:border .2s"></div>
+      {% endfor %}
+    </div>
+    <input type="hidden" id="eColor" value="{{ avatar_color }}"/>
+  </div>
+  <div style="display:flex;gap:.75rem">
+    <button class="btn btn-v" onclick="saveProfile()">Save</button>
+    <button class="btn btn-out" onclick="closeModal('editModal')">Cancel</button>
+  </div>
+</div></div>
+{% endblock %}
+{% block extra_js %}
+<script type="module">
+import { db } from "/static/js/firebase-config.js";
+import { ref, onValue, get, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { initials, timeAgo } from "/static/js/firebase-config.js";
+const ME="{{ uid }}", TARGET_USER="{{ profile_username }}";
+
+async function loadProfile(){
+  const usersSnap=await get(ref(db,"users"));
+  if(!usersSnap.exists()) return;
+  const users=Object.values(usersSnap.val());
+  const u=users.find(x=>x.username===TARGET_USER);
+  if(!u){document.getElementById("profileContent").innerHTML='<div class="empty"><i class="fas fa-user-slash"></i><p>User not found</p></div>';return;}
+  const isOnline=(await get(ref(db,`online/${u.uid}`))).exists();
+  const posts=(await get(ref(db,"media"))).val();
+  const myPosts=posts?Object.values(posts).filter(p=>p.author_id===u.uid).slice(0,9):[];
+  const msgCount=(await get(ref(db,"chats/general/messages"))).val();
+  const myChatCount=msgCount?Object.values(msgCount).filter(m=>m.sender_id===u.uid).length:0;
+  const isMe=u.uid===ME;
+
+  // Birthday check
+  if(isMe&&u.birthday){
+    const t=new Date(),mm=String(t.getMonth()+1).padStart(2,'0'),dd=String(t.getDate()).padStart(2,'0');
+    if(u.birthday.slice(5)===`${mm}-${dd}`) setTimeout(()=>{launchConfetti(120);showToast(`🎉 Happy Birthday, ${u.full_name.split(' ')[0]}!`);},400);
+  }
+
+  document.getElementById("profileContent").innerHTML=`
+    <div class="p-hero reveal">
+      <div class="av av-100" style="background:${u.avatar_color||'#7c6bff'}">${initials(u.full_name||'?')}</div>
+      <div class="profile-info" style="flex:1;min-width:220px">
+        <div class="p-name">${u.full_name||'?'} ${isOnline?'<span style="font-size:.85rem;color:var(--green);font-weight:500"> ● Online</span>':''}</div>
+        <div class="p-un">@${u.username}${u.roll_no?' · '+u.roll_no:''}</div>
+        ${u.mood?`<div class="p-mood">${u.mood} <span style="font-size:.82rem;color:var(--t2)">${u.mood==='😊'?'Happy':u.mood==='😎'?'Cool':u.mood==='💻'?'Coding':u.mood==='😴'?'Sleeping':u.mood==='📚'?'Studying':'Vibing'}</span></div>`:''}
+        ${u.bio?`<div class="p-bio">${u.bio}</div>`:''}
+        <div class="p-stats">
+          <div><div class="ps-num">${myChatCount}</div><div class="ps-lbl">Messages</div></div>
+          <div><div class="ps-num">${myPosts.length}</div><div class="ps-lbl">Uploads</div></div>
+        </div>
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+          ${isMe?`<button class="btn btn-v btn-sm" onclick="openModal('editModal')"><i class="fas fa-edit"></i>Edit Profile</button>`
+                :`<a href="/dm/${u.username}" class="btn btn-v btn-sm"><i class="fas fa-comment"></i>Message</a>`}
+          ${u.birthday?`<span class="tag tag-p">🎂 ${u.birthday}</span>`:''}
+          ${u.is_admin?'<span class="tag tag-v">Admin</span>':''}
+        </div>
+      </div>
+    </div>
+    ${myPosts.length?`<div class="card card-body reveal" style="margin-bottom:1.5rem">
+      <div style="font-weight:800;margin-bottom:1rem">📸 Uploads</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem">
+        ${myPosts.map(p=>`<div style="aspect-ratio:1;border-radius:var(--r-sm);overflow:hidden;background:var(--bg3);border:1px solid var(--b1)">
+          ${p.type==='image'?`<img src="${p.url}" style="width:100%;height:100%;object-fit:cover" loading="lazy"/>`
+            :`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center"><i class="fas fa-video" style="color:var(--violet);font-size:1.4rem"></i></div>`}
+        </div>`).join("")}
+      </div>
+    </div>`:""}`;
+  // Pre-fill edit form
+  if(isMe){
+    document.getElementById("eBio").value=u.bio||"";
+    document.getElementById("eMood").value=u.mood||"😊";
+    document.getElementById("eColor").value=u.avatar_color||"#6c63ff";
+  }
+  document.querySelectorAll(".reveal").forEach((el,i)=>setTimeout(()=>el.classList.add("in"),60+i*80));
+}
+loadProfile();
+
+window.selectMood=function(m){document.getElementById("eMood").value=m;document.querySelectorAll(".mood-opt").forEach(b=>{b.style.borderColor=b.dataset.mood===m?"var(--violet)":"var(--b2)";});};
+window.selectColor=function(c){document.getElementById("eColor").value=c;document.querySelectorAll(".color-opt").forEach(d=>{d.style.borderColor=d.dataset.c===c?"#fff":"transparent";});};
+window.saveProfile=async function(){
+  const snap=await get(ref(db,"users"));
+  const users=Object.entries(snap.val());
+  const [,u]=users.find(([,x])=>x.uid===ME)||[];
+  if(!u) return;
+  await set(ref(db,`users/${ME}`),{...u,bio:document.getElementById("eBio").value,mood:document.getElementById("eMood").value,avatar_color:document.getElementById("eColor").value});
+  showToast("✅ Profile updated!"); closeModal("editModal"); setTimeout(()=>location.reload(),500);
+};
+</script>{% endblock %}

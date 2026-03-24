@@ -1,0 +1,108 @@
+{% extends "layout.html" %}{% block title %}Stories — CSD Connect{% endblock %}
+{% block content %}
+<div class="ph"><div class="ph-row"><div><h1>📸 Stories</h1><p>24-hour memories — they disappear after a day</p></div>
+<button class="btn btn-p reveal" onclick="openModal('addStoryModal')"><i class="fas fa-plus"></i>Add Story</button></div></div>
+<div id="storiesGrid" class="g3"></div>
+<div class="story-viewer" id="storyViewer">
+  <div class="story-content">
+    <div class="story-progress" id="storyProgress"></div>
+    <div class="story-hdr">
+      <div class="av av-36" id="stAv" style="background:#7c6bff">?</div>
+      <div><div style="color:#fff;font-weight:700;font-size:.9rem" id="stName">—</div><div style="color:rgba(255,255,255,.6);font-size:.73rem" id="stTime">—</div></div>
+      <button class="story-close" onclick="closeStory()"><i class="fas fa-times"></i></button>
+    </div>
+    <img id="stImg" class="story-media" src="" alt="" style="display:none"/>
+    <video id="stVid" class="story-media" autoplay style="display:none"></video>
+  </div>
+</div>
+<div class="overlay" id="addStoryModal"><div class="modal">
+  <div class="modal-t">📸 Add Story</div><div class="modal-s">Visible for 24 hours</div>
+  <div class="fg"><label class="fl">Photo or Video</label><input type="file" id="stFile" class="fi" accept="image/*,video/*"/></div>
+  <div style="display:flex;gap:.75rem"><button class="btn btn-p" onclick="addStory()"><i class="fas fa-plus"></i>Post Story</button><button class="btn btn-out" onclick="closeModal('addStoryModal')">Cancel</button></div>
+  <div id="stProg" style="display:none;margin-top:.75rem"><div style="background:var(--bg3);border-radius:4px;height:5px"><div id="stProgBar" style="height:100%;background:var(--pink);border-radius:4px;width:0;transition:width .3s"></div></div></div>
+</div></div>
+{% endblock %}
+{% block extra_js %}
+<script type="module">
+import { db, storage, initials, timeAgo } from "/static/js/firebase-config.js";
+import { ref as dbRef, onValue, set, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { ref as stRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+const ME="{{ uid }}", ME_NAME="{{ full_name }}", ME_COLOR="{{ avatar_color }}";
+const now=Date.now(), day=86400000;
+onValue(dbRef(db,"stories"), snap=>{
+  const grid=document.getElementById("storiesGrid");
+  if(!snap.exists()){grid.innerHTML='<div class="empty"><i class="fas fa-circle-notch"></i><p>No stories yet. Be the first!</p></div>';return;}
+  const active=Object.entries(snap.val()).filter(([_,s])=>s.expires_at>now);
+  if(!active.length){grid.innerHTML='<div class="empty"><i class="fas fa-circle-notch"></i><p>No active stories. Add yours!</p></div>';return;}
+  grid.innerHTML=active.map(([id,s])=>`
+    <div class="card reveal" style="cursor:pointer;overflow:hidden" onclick="viewStory('${id}')">
+      <div style="aspect-ratio:9/16;background:var(--bg3);position:relative;overflow:hidden">
+        ${s.type==='image'?`<img src="${s.url}" style="width:100%;height:100%;object-fit:cover"/>`
+          :`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#000"><video src="${s.url}" style="width:100%;max-height:100%"></video></div>`}
+        <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.7) 0%,transparent 50%);display:flex;flex-direction:column;justify-content:flex-end;padding:1rem">
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <div class="av av-36" style="background:${s.author_color||'#7c6bff'}">${initials(s.author_name)}</div>
+            <div><div style="color:#fff;font-weight:700;font-size:.85rem">${s.author_name}</div>
+            <div style="color:rgba(255,255,255,.6);font-size:.72rem">${timeAgo(s.created_at)}</div></div>
+          </div>
+        </div>
+        <div style="position:absolute;top:.75rem;right:.75rem;background:rgba(255,107,157,.9);color:#fff;font-size:.65rem;font-weight:800;padding:.18rem .55rem;border-radius:25px">
+          ${Math.ceil((s.expires_at-now)/3600000)}h left
+        </div>
+      </div>
+    </div>`).join("");
+  document.querySelectorAll(".reveal").forEach((el,i)=>setTimeout(()=>el.classList.add("in"),50+i*60));
+});
+
+let currentStories=[], stIdx=0, stTimer;
+window.viewStory=function(id){
+  import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js").then(({get})=>get(dbRef(db,"stories")).then(snap=>{
+    if(!snap.exists()) return;
+    const all=Object.entries(snap.val()).filter(([_,s])=>s.expires_at>now);
+    const startIdx=all.findIndex(([k])=>k===id);
+    currentStories=all; stIdx=startIdx>=0?startIdx:0;
+    document.getElementById("storyViewer").classList.add("open");
+    showStory(stIdx);
+    set(dbRef(db,`stories/${id}/seen_by/${ME}`),true);
+  }));
+};
+function showStory(i){
+  clearTimeout(stTimer);
+  if(i>=currentStories.length){closeStory();return;}
+  const [id,s]=currentStories[i];
+  document.getElementById("stAv").style.background=s.author_color||'#7c6bff';
+  document.getElementById("stAv").textContent=initials(s.author_name||'?');
+  document.getElementById("stName").textContent=s.author_name||'?';
+  document.getElementById("stTime").textContent=timeAgo(s.created_at);
+  const img=document.getElementById("stImg"), vid=document.getElementById("stVid");
+  if(s.type==='image'){vid.style.display="none";img.src=s.url;img.style.display="block";}
+  else{img.style.display="none";vid.src=s.url;vid.style.display="block";vid.play();}
+  const prog=document.getElementById("storyProgress");
+  prog.innerHTML=currentStories.map((_,j)=>`<div class="story-bar"><div class="story-bar-fill" id="sb-${j}"></div></div>`).join("");
+  for(let j=0;j<i;j++) document.getElementById(`sb-${j}`).style.width="100%";
+  const fill=document.getElementById(`sb-${i}`);
+  if(fill){fill.style.transition=`width 5s linear`;setTimeout(()=>fill.style.width="100%",50);}
+  stTimer=setTimeout(()=>showStory(i+1),5100);
+}
+window.closeStory=function(){document.getElementById("storyViewer").classList.remove("open");clearTimeout(stTimer);document.getElementById("stVid").pause?.();};
+document.getElementById("storyViewer").addEventListener("click",e=>{if(e.target===e.currentTarget||e.target.closest(".story-content")){}});
+
+window.addStory=async function(){
+  const file=document.getElementById("stFile").files[0];
+  if(!file){showToast("Select a file");return;}
+  const ext=file.name.split('.').pop().toLowerCase();
+  const type=['png','jpg','jpeg','gif','webp'].includes(ext)?'image':'video';
+  document.getElementById("stProg").style.display="block";
+  const path=`stories/${Date.now()}.${ext}`;
+  const task=uploadBytesResumable(stRef(storage,path),file);
+  task.on("state_changed",s=>{document.getElementById("stProgBar").style.width=(s.bytesTransferred/s.totalBytes*100)+"%";},
+    e=>showToast("❌ "+e.message),
+    async()=>{
+      const url=await getDownloadURL(task.snapshot.ref);
+      await push(dbRef(db,"stories"),{url,type,author_id:ME,author_name:ME_NAME,author_color:ME_COLOR,created_at:now,expires_at:now+day,seen_by:{}});
+      showToast("✅ Story posted!");closeModal("addStoryModal");
+    }
+  );
+};
+</script>
+{% endblock %}

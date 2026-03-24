@@ -1,0 +1,48 @@
+{% extends "layout.html" %}{% block title %}Members — CSD Connect{% endblock %}
+{% block content %}
+<div class="ph"><div class="ph-row"><div><h1>👥 CSD Members</h1><p id="memCount">Loading…</p></div>
+<input type="text" class="fi" id="memSearch" placeholder="Search…" style="width:200px" oninput="filterMems(this.value)"/></div></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1rem" id="memGrid"><div class="spinner"></div></div>
+{% endblock %}
+{% block extra_js %}
+<script type="module">
+import { db } from "/static/js/firebase-config.js";
+import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { initials } from "/static/js/firebase-config.js";
+let allMems=[];
+onValue(ref(db,"users"), snap=>{
+  const grid=document.getElementById("memGrid");
+  if(!snap.exists()){grid.innerHTML='<div class="empty"><i class="fas fa-users"></i><p>No members yet</p></div>';return;}
+  onValue(ref(db,"online"), os=>{
+    const online=os.exists()?Object.keys(os.val()):[];
+    allMems=Object.values(snap.val());
+    document.getElementById("memCount").textContent=`${allMems.length} brilliant minds`;
+    renderMems(allMems,online);
+  });
+});
+function renderMems(mems,online){
+  const grid=document.getElementById("memGrid");
+  grid.innerHTML=mems.map(m=>`
+    <a href="/profile/${m.username}" class="mc reveal">
+      <div class="mc-top">
+        <div class="av av-56 ${online.includes(m.uid)?'av-ring':''}" style="background:${m.avatar_color||'#7c6bff'};margin:0 auto">${initials(m.full_name||'?')}</div>
+        ${online.includes(m.uid)?'<div style="display:flex;align-items:center;justify-content:center;gap:.3rem;margin-top:.35rem"><span class="online-pip"></span><span style="font-size:.7rem;color:var(--green)">Online</span></div>':""}
+        <div class="mc-name">${m.full_name||'?'}</div>
+        <div class="mc-roll">${m.roll_no||'—'}</div>
+      </div>
+      <div class="mc-bot">
+        ${m.mood?`<div style="font-size:1rem;margin-bottom:.3rem">${m.mood}</div>`:""}
+        ${m.bio?`<div style="font-size:.79rem;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.bio}</div>`:""}
+        <div style="display:flex;gap:.4rem;margin-top:.4rem;flex-wrap:wrap">
+          ${m.is_admin?'<span class="tag tag-v">Admin</span>':""}
+          <span class="tag tag-p">CSD</span>
+        </div>
+      </div>
+    </a>`).join("");
+  document.querySelectorAll(".reveal").forEach((el,i)=>setTimeout(()=>el.classList.add("in"),40+i*35));
+}
+window.filterMems=function(q){
+  const filtered=allMems.filter(m=>(m.full_name||'').toLowerCase().includes(q.toLowerCase())||(m.roll_no||'').toLowerCase().includes(q.toLowerCase()));
+  renderMems(filtered,[]);
+};
+</script>{% endblock %}

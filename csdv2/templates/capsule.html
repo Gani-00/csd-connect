@@ -1,0 +1,68 @@
+{% extends "layout.html" %}{% block title %}Time Capsule — CSD Connect{% endblock %}
+{% block content %}
+<div class="ph"><div class="ph-row"><div><h1>⏳ Time Capsule</h1><p>Sealed messages — unlocked on a future date. Stored in Firebase forever.</p></div>
+<button class="btn btn-v reveal" onclick="openModal('capModal')"><i class="fas fa-plus"></i>Write Capsule</button></div></div>
+<div id="unlockedSec"></div><div id="lockedSec"></div>
+<div class="overlay" id="capModal"><div class="modal">
+  <div class="modal-t">⏳ Write a Time Capsule</div><div class="modal-s">Sealed until your chosen date</div>
+  <div class="fg"><label class="fl">Title</label><input type="text" id="cT" class="fi" placeholder="To my future self…"/></div>
+  <div class="fg"><label class="fl">Your Message</label><textarea id="cC" class="fi" rows="5" placeholder="Write something meaningful…"></textarea></div>
+  <div class="fg"><label class="fl">Unlock Date</label><input type="date" id="cD" class="fi"/></div>
+  <div style="display:flex;gap:.75rem"><button class="btn btn-v" onclick="addCap()"><i class="fas fa-lock"></i>Seal</button><button class="btn btn-out" onclick="closeModal('capModal')">Cancel</button></div>
+</div></div>
+{% endblock %}
+{% block extra_js %}
+<script type="module">
+import { db, initials } from "/static/js/firebase-config.js";
+import { ref, onValue, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+const ME="{{ uid }}", ME_NAME="{{ full_name }}", ME_COLOR="{{ avatar_color }}";
+const today=new Date().toISOString().slice(0,10);
+document.getElementById("cD").min=today;
+
+onValue(ref(db,"capsules"), snap=>{
+  const uSec=document.getElementById("unlockedSec"), lSec=document.getElementById("lockedSec");
+  if(!snap.exists()){uSec.innerHTML="";lSec.innerHTML='<div class="empty"><i class="fas fa-hourglass-half"></i><p>No capsules yet. Write one!</p></div>';return;}
+  // Auto-unlock
+  Object.entries(snap.val()).forEach(([id,c])=>{if(!c.is_unlocked&&c.unlock_date<=today)set(ref(db,`capsules/${id}/is_unlocked`),true);});
+  const unlocked=Object.values(snap.val()).filter(c=>c.is_unlocked);
+  const locked=Object.values(snap.val()).filter(c=>!c.is_unlocked);
+  uSec.innerHTML=unlocked.length?`
+    <div style="font-weight:800;font-size:1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem"><span style="color:var(--green)">🔓</span>Unlocked Capsules</div>
+    <div class="g3" style="margin-bottom:2rem">
+    ${unlocked.map(c=>`<div class="cap-card unlocked reveal">
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
+        <div class="av av-40" style="background:${c.author_color||'#7c6bff'}">${initials(c.author_name||'?')}</div>
+        <div><div style="font-weight:700;font-size:.85rem">${c.author_name}</div><div style="font-size:.72rem;color:var(--t3)">${c.created_at?.slice?.(0,10)||''}</div></div>
+        <span class="tag tag-g" style="margin-left:auto">Unlocked</span>
+      </div>
+      <div class="cap-title">${c.title}</div>
+      <div class="cap-txt">${c.content}</div>
+      <div class="cap-meta"><i class="fas fa-calendar-check" style="color:var(--green)"></i>Opened ${c.unlock_date}</div>
+    </div>`).join("")}
+    </div>`:"";
+  lSec.innerHTML=locked.length?`
+    <div style="font-weight:800;font-size:1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem"><span style="color:var(--amber)">🔒</span>Locked Capsules</div>
+    <div class="g3">
+    ${locked.map((c,i)=>`<div class="cap-card locked reveal">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+        <div style="font-weight:600;font-size:.85rem">${c.author_name}</div><span class="tag tag-a">Locked</span>
+      </div>
+      <div class="cap-title">${c.title}</div>
+      <div style="color:var(--t3);font-style:italic;font-size:.85rem;margin:.5rem 0">🔒 Sealed until ${c.unlock_date}</div>
+      <div class="countdown" id="cd${i}"><i class="fas fa-hourglass-half"></i> Calculating…</div>
+    </div>`).join("")}
+    </div>`:'<div class="empty"><i class="fas fa-lock-open"></i><p>No locked capsules</p></div>';
+  locked.forEach((c,i)=>{
+    const el=document.getElementById(`cd${i}`);
+    if(!el) return;
+    function tick(){const d=new Date(c.unlock_date)-new Date();if(d<=0){el.textContent="Opening soon…";return;}const days=Math.floor(d/86400000),hrs=Math.floor(d%86400000/3600000),mins=Math.floor(d%3600000/60000);el.innerHTML=`<i class="fas fa-hourglass-half"></i> ${days}d ${hrs}h ${mins}m left`;setTimeout(tick,60000);}tick();
+  });
+  document.querySelectorAll(".reveal").forEach((el,i)=>setTimeout(()=>el.classList.add("in"),50+i*55));
+});
+window.addCap=async function(){
+  const t=document.getElementById("cT").value.trim(),c=document.getElementById("cC").value.trim(),d=document.getElementById("cD").value;
+  if(!t||!c||!d){showToast("Fill all fields");return;}
+  await push(ref(db,"capsules"),{title:t,content:c,unlock_date:d,is_unlocked:d<=today,author_id:ME,author_name:ME_NAME,author_color:ME_COLOR,created_at:new Date().toISOString().slice(0,10)});
+  showToast("🔒 Capsule sealed!");closeModal("capModal");
+};
+</script>{% endblock %}

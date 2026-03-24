@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>DM — CSD Connect</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/main.css') }}"/>
+<style>.page{padding:0!important;overflow:hidden;height:calc(100vh - var(--nav-h))}</style>
+</head>
+<body>
+<canvas id="pcv"></canvas>
+<nav class="nav">
+  <a href="/chat" class="iBtn" style="margin-right:.5rem;flex-shrink:0"><i class="fas fa-arrow-left"></i></a>
+  <div class="av av-36" id="otherAv" style="background:#7c6bff;flex-shrink:0">?</div>
+  <div style="margin-left:.5rem">
+    <div style="font-weight:700;font-size:.9rem" id="otherName">Loading…</div>
+    <div style="font-size:.72rem" id="otherStatus" style="color:var(--t3)">—</div>
+  </div>
+  <div class="nav-r" style="margin-left:auto">
+    <button class="iBtn" onclick="toggleTheme()"><i class="fas fa-moon" id="themeIcon"></i></button>
+    <a href="/profile/{{ username }}" class="nav-av" style="background:{{ avatar_color }}">{{ full_name[:2]|upper }}</a>
+  </div>
+</nav>
+<div class="app">
+  <div style="padding-top:var(--nav-h);height:100vh;display:flex;flex-direction:column">
+    <div class="chat-msgs" id="chatMsgs" style="flex:1;overflow-y:auto;padding:1.25rem;display:flex;flex-direction:column;gap:.35rem"></div>
+    <div id="typingBox" style="padding:0 1.25rem;min-height:24px"></div>
+    <div class="chat-bar">
+      <textarea class="chat-inp" id="chatInp" placeholder="Message…" rows="1"></textarea>
+      <button class="send-btn" id="sendDmBtn"><i class="fas fa-paper-plane"></i></button>
+    </div>
+  </div>
+</div>
+<div id="csd-toast" class="toast"></div>
+<script src="{{ url_for('static',filename='js/main.js') }}"></script>
+<script type="module">
+import { db, initials } from "/static/js/firebase-config.js";
+import { ref, onValue, push, get, serverTimestamp, set, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { formatTime } from "/static/js/firebase-config.js";
+
+const ME = "{{ uid }}", ME_NAME = "{{ full_name }}", ME_COLOR = "{{ avatar_color }}";
+const OTHER_USER = "{{ other_username }}";
+let otherUid = null, dmRoom = null;
+
+// Load other user
+get(ref(db, "users")).then(snap => {
+  if (!snap.exists()) return;
+  const users = Object.values(snap.val());
+  const other = users.find(u => u.username === OTHER_USER);
+  if (!other) return;
+  otherUid = other.uid;
+  document.getElementById("otherAv").style.background = other.avatar_color || "#7c6bff";
+  document.getElementById("otherAv").textContent = initials(other.full_name || "?");
+  document.getElementById("otherName").textContent = other.full_name || "?";
+
+  // Online status
+  onValue(ref(db, `online/${otherUid}`), s => {
+    const el = document.getElementById("otherStatus");
+    el.textContent = s.exists() ? "● Online" : "Offline";
+    el.style.color = s.exists() ? "var(--green)" : "var(--t3)";
+  });
+
+  // DM room
+  dmRoom = [ME, otherUid].sort().join("_");
+  const msgsRef = ref(db, `dms/${dmRoom}/messages`);
+
+  // Load messages
+  onValue(msgsRef, snap => {
+    const el = document.getElementById("chatMsgs");
+    if (!snap.exists()) return;
+    el.innerHTML = "";
+    Object.entries(snap.val()).forEach(([k, m]) => appendMsg(k, m, m.sender_id === ME));
+    el.scrollTop = el.scrollHeight;
+  });
+
+  // Send
+  async function sendMsg() {
+    const inp = document.getElementById("chatInp");
+    const txt = inp.value.trim();
+    if (!txt) return;
+    inp.value = ""; inp.style.height = "42px";
+    await push(msgsRef, { sender_id: ME, sender_name: ME_NAME, sender_color: ME_COLOR, content: txt, ts: serverTimestamp() });
+    // Notify other
+    await push(ref(db, `notifications/${otherUid}`), {
+      message: `💬 ${ME_NAME}: ${txt.slice(0, 60)}`, type: "chat", ts: Date.now(), read: false
+    });
+  }
+
+  document.getElementById("sendDmBtn").onclick = sendMsg;
+  document.getElementById("chatInp").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); } });
+  document.getElementById("chatInp").addEventListener("input", function() {
+    this.style.height = "42px"; this.style.height = Math.min(this.scrollHeight, 120) + "px";
+  });
+
+  // Mark online
+  const onlineRef = ref(db, `online/${ME}`);
+  set(onlineRef, { name: ME_NAME, color: ME_COLOR, ts: serverTimestamp() });
+  onDisconnect(onlineRef).remove();
+});
+
+function appendMsg(id, m, isMine) {
+  const el = document.getElementById("chatMsgs");
+  if (!el || document.getElementById(`msg-${id}`)) return;
+  const div = document.createElement("div");
+  div.className = `msg-row ${isMine ? "mine" : ""}`;
+  div.id = `msg-${id}`;
+  const ini = initials(m.sender_name || "?");
+  div.innerHTML = `
+    ${!isMine ? `<div class="av av-36" style="background:${m.sender_color||'#7c6bff'}">${ini}</div>` : ""}
+    <div>
+      <div class="bubble">${escHtml(m.content)}<span class="msg-time">${m.ts ? formatTime(m.ts) : ""}</span></div>
+    </div>
+    ${isMine ? `<div class="av av-36" style="background:${m.sender_color||'#7c6bff'}">${ini}</div>` : ""}`;
+  el.appendChild(div);
+}
+
+function escHtml(s) { const d = document.createElement("div"); d.appendChild(document.createTextNode(s || "")); return d.innerHTML; }
+</script>
+</body>
+</html>

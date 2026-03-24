@@ -1,0 +1,53 @@
+{% extends "layout.html" %}{% block title %}Polls — CSD Connect{% endblock %}
+{% block content %}
+<div class="ph"><div class="ph-row"><div><h1>📊 Polls</h1><p>Have your say in CSD decisions — votes stored in Firebase</p></div>
+<button class="btn btn-v reveal" onclick="openModal('pollModal')"><i class="fas fa-plus"></i>Create Poll</button></div></div>
+<div id="pollsWrap"><div class="spinner"></div></div>
+<div class="overlay" id="pollModal"><div class="modal">
+  <div class="modal-t">📊 Create Poll</div><div class="modal-s">Ask your batch something</div>
+  <div class="fg"><label class="fl">Question</label><input type="text" id="pQ" class="fi" placeholder="Where should we meet for reunion?"/></div>
+  <div class="fg"><label class="fl">Options (one per line, min 2)</label><textarea id="pOpts" class="fi" rows="4" placeholder="Goa 🏖️&#10;Manali ❄️&#10;Kerala 🌴"></textarea></div>
+  <div style="display:flex;gap:.75rem"><button class="btn btn-v" onclick="createPoll()"><i class="fas fa-plus"></i>Create</button><button class="btn btn-out" onclick="closeModal('pollModal')">Cancel</button></div>
+</div></div>
+{% endblock %}
+{% block extra_js %}
+<script type="module">
+import { db } from "/static/js/firebase-config.js";
+import { ref, onValue, push, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+const ME="{{ uid }}", ME_NAME="{{ full_name }}";
+onValue(ref(db,"polls"), snap=>{
+  const el=document.getElementById("pollsWrap");
+  if(!snap.exists()){el.innerHTML='<div class="empty"><i class="fas fa-poll"></i><p>No polls yet. Create one!</p></div>';return;}
+  el.innerHTML=Object.entries(snap.val()).reverse().map(([id,p])=>{
+    const opts=p.options||[];
+    const votes=p.votes||{};
+    const myVote=votes[ME]!==undefined?votes[ME]:null;
+    const counts=opts.map((_,i)=>Object.values(votes).filter(v=>v===i).length);
+    const total=counts.reduce((a,b)=>a+b,0);
+    return `<div class="poll-card reveal" id="pc-${id}">
+      <div class="poll-q">${p.question}</div>
+      <div style="font-size:.75rem;color:var(--t3);margin-bottom:.75rem">By ${p.author_name||'?'} · ${total} vote${total!==1?'s':''}</div>
+      ${opts.map((o,i)=>{
+        const pct=total?Math.round(counts[i]/total*100):0;
+        return `<div class="poll-opt ${myVote===i?'voted':''}" onclick="${myVote===null?`castVote('${id}',${i})`:''}">
+          <div class="poll-bar" style="width:${pct}%"></div>
+          <span class="poll-txt">${myVote===i?'<i class="fas fa-check-circle" style="color:var(--violet);margin-right:.3rem"></i>':''}${o}</span>
+          <span class="poll-pct">${pct}%</span>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }).join("");
+  document.querySelectorAll(".reveal").forEach((el,i)=>setTimeout(()=>el.classList.add("in"),50+i*70));
+});
+window.castVote=async function(id,idx){
+  await set(ref(db,`polls/${id}/votes/${ME}`),idx);
+  showToast("✅ Vote cast!");
+};
+window.createPoll=async function(){
+  const q=document.getElementById("pQ").value.trim();
+  const opts=document.getElementById("pOpts").value.split("\n").map(o=>o.trim()).filter(Boolean);
+  if(!q||opts.length<2){showToast("Need a question and at least 2 options");return;}
+  await push(ref(db,"polls"),{question:q,options:opts,votes:{},author_name:ME_NAME,author_id:ME,created_at:Date.now()});
+  showToast("✅ Poll created!");closeModal("pollModal");
+};
+</script>{% endblock %}
